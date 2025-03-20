@@ -1,0 +1,91 @@
+import numpy as np
+from scipy.optimize import minimize
+from scipy.stats import norm
+
+def ar_likelihood(params, data, p):
+    """
+    Calculate the negative (unconditional) log likelihood for an AR(p) model.
+
+    params: list of parameters, where the first p are AR coefficients and the last is the noise variance.
+    data: observed data.
+    p: order of the AR model.
+    """
+    # Extract AR coefficients and noise variance
+    c = params[0]
+    phi = params[1:p+1]
+    sigma2 = params[-1]
+        
+    # Calculate residuals
+    T = len(data)
+    residuals = data[p:] - c - np.dot(np.column_stack([data[p-j-1:T-j-1] for j in range(p)]), phi)
+    
+    # Calculate negative log likelihood
+    log_likelihood = (-T/2 * np.log(2 * np.pi * sigma2) - np.sum(residuals**2) / (2 * sigma2))
+    
+    return -log_likelihood
+
+def estimate_ar_parameters(data, p):
+    """
+    Estimate AR model parameters using maximum likelihood estimation.
+
+    data: observed data.
+    p: order of the AR model.
+    """
+    # Initial parameter guess (random AR coefficients, variance of 1)
+    params_initial = np.zeros(p+2)
+    params_initial[-1] = 1.0
+
+    ## Bounds
+    bounds = [(None, None)]
+    # Then p AR coefficients, each bounded between -1 and 1
+    bounds += [(-1, 1) for _ in range(p)]
+    # The variance parameter, bounded to be positive
+    bounds += [(1e-6, None)]
+
+    # Minimize the negative log likelihood
+    result = minimize(ar_likelihood, params_initial, args=(data, p), bounds=bounds)
+    
+    if result.success:
+        estimated_params = result.x
+        return estimated_params
+    else:
+        raise Exception("Optimization failed:", result.message)
+
+# Example usage
+data = np.random.randn(100)  # Simulated data; replace with actual data
+p = 2  # AR(2) model
+params = estimate_ar_parameters(data, p)
+print("Estimated parameters:", params)
+
+
+
+#####heck the  are equivalent to those we obtain by applying the OLS.
+
+import numpy as np
+
+def fit_ar_ols_xx(data, p):
+    """
+    data: observed data.
+    p: order of the AR model.
+    note: no constant
+    """
+    # Prepare the lagged data matrix
+    T = len(data)
+    Y = data[p:]  # Dependent variable (from p to end)
+    X = np.column_stack([data[p-i-1:T-i-1] for i in range(p)])
+    X = np.column_stack((np.ones(X.shape[0]), X))
+    
+    # Calculate OLS estimates using the formula: beta = (X'X)^-1 X'Y
+    XTX = np.dot(X.T, X)  # X'X
+    XTY = np.dot(X.T, Y)  # X'Y
+    beta_hat = np.linalg.solve(XTX, XTY)  # Solve (X'X)beta = X'Y
+    
+    return beta_hat
+
+
+beta_hat = fit_ar_ols_xx(data, p)
+print("Estimated AR coefficients:", beta_hat)
+
+
+
+
